@@ -4,4 +4,5 @@ __pycache__/
 .DS_Store
 node_modules/
 .vercel
+*.log
 generate.py

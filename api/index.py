@@ -1,17 +1,13 @@
-from flask import Flask, request, jsonify
-from openai import OpenAI
-import requests
-import base64
-import os
+from http.server import BaseHTTPRequestHandler
+import json
 
-app = Flask(__name__)
-
-def get_openai_client(api_key):
-    if api_key:
-        return OpenAI(api_key=api_key)
-    return None
-
-HTML_TEMPLATE = """<!DOCTYPE html>
+class handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'text/html; charset=utf-8')
+        self.end_headers()
+        
+        html = '''<!DOCTYPE html>
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
@@ -57,10 +53,6 @@ body {
     margin-bottom: 10px;
 }
 
-.header p {
-    color: #666;
-}
-
 .form-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -93,13 +85,11 @@ input:focus, select:focus, textarea:focus {
     outline: none;
     border-color: #667eea;
     box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-    transform: translateY(-1px);
 }
 
 textarea {
     resize: vertical;
     min-height: 120px;
-    line-height: 1.6;
 }
 
 .model-info {
@@ -133,10 +123,6 @@ textarea {
     box-shadow: 0 15px 35px rgba(102, 126, 234, 0.4);
 }
 
-.generate-btn:active {
-    transform: translateY(0);
-}
-
 .status {
     margin: 25px 0;
     padding: 15px 20px;
@@ -152,11 +138,6 @@ textarea {
 
 .status.error {
     background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
-    color: white;
-}
-
-.status.warning {
-    background: linear-gradient(135deg, #fdcb6e 0%, #e17055 100%);
     color: white;
 }
 
@@ -178,7 +159,6 @@ textarea {
 
 .image-card:hover {
     transform: translateY(-5px);
-    box-shadow: 0 20px 40px rgba(0,0,0,0.15);
 }
 
 .image-card img {
@@ -214,12 +194,6 @@ textarea {
     border-radius: 25px;
     font-weight: 600;
     border: 2px solid rgba(255,255,255,0.3);
-    transition: all 0.3s ease;
-}
-
-.download-btn:hover {
-    background: rgba(255,255,255,0.3);
-    transform: scale(1.05);
 }
 
 .balance-link {
@@ -233,30 +207,7 @@ textarea {
     text-decoration: none;
 }
 
-.balance-link a:hover {
-    text-decoration: underline;
-}
-
-.loading {
-    display: inline-block;
-    width: 20px;
-    height: 20px;
-    border: 3px solid rgba(255,255,255,.3);
-    border-radius: 50%;
-    border-top-color: #fff;
-    animation: spin 1s ease-in-out infinite;
-    margin-right: 10px;
-}
-
-@keyframes spin {
-    to { transform: rotate(360deg); }
-}
-
 @media (max-width: 768px) {
-    .header h1 {
-        font-size: 2rem;
-    }
-    
     .container {
         padding: 25px;
         margin: 10px;
@@ -273,7 +224,7 @@ textarea {
     <div class="container">
         <div class="header">
             <h1>🎨 AI Image Generator</h1>
-            <p>Создавайте удивительные изображения с помощью искусственного интеллекта</p>
+            <p style="color: #666;">Создавайте удивительные изображения с помощью ИИ</p>
         </div>
         
         <form id="imageForm">
@@ -321,14 +272,6 @@ textarea {
                     </select>
                 </div>
                 
-                <div class="form-group" id="moderationGroup">
-                    <label for="moderation">Модерация (GPT Image 1):</label>
-                    <select id="moderation" name="moderation">
-                        <option value="auto">Авто (Стандартная)</option>
-                        <option value="low">Низкая (Менее строгая)</option>
-                    </select>
-                </div>
-                
                 <div class="form-group">
                     <label for="n">Количество изображений:</label>
                     <select id="n" name="n">
@@ -345,7 +288,7 @@ textarea {
                 <textarea id="prompt" name="prompt" placeholder="Опишите изображение, которое хотите создать..." required></textarea>
             </div>
             
-            <button type="submit" class="generate-btn" id="generateBtn">
+            <button type="submit" class="generate-btn">
                 Создать изображения
             </button>
         </form>
@@ -366,7 +309,6 @@ textarea {
             const qualitySelect = document.getElementById('quality');
             const styleGroup = document.getElementById('styleGroup');
             const backgroundGroup = document.getElementById('backgroundGroup');
-            const moderationGroup = document.getElementById('moderationGroup');
             const infoDiv = document.getElementById('modelInfo');
             
             sizeSelect.innerHTML = '';
@@ -386,7 +328,6 @@ textarea {
                 qualityGroup.style.display = 'block';
                 styleGroup.style.display = 'none';
                 backgroundGroup.style.display = 'block';
-                moderationGroup.style.display = 'block';
                 infoDiv.innerHTML = '🚀 Новейшая модель с лучшим качеством и пониманием текста. Может занимать до 2 минут.';
             } else if (model === 'dall-e-3') {
                 sizeSelect.innerHTML = `
@@ -401,7 +342,6 @@ textarea {
                 qualityGroup.style.display = 'block';
                 styleGroup.style.display = 'block';
                 backgroundGroup.style.display = 'none';
-                moderationGroup.style.display = 'none';
                 infoDiv.innerHTML = '🎨 Высокое качество изображений и понимание сложных описаний.';
             } else {
                 sizeSelect.innerHTML = `
@@ -412,7 +352,6 @@ textarea {
                 qualityGroup.style.display = 'none';
                 styleGroup.style.display = 'none';
                 backgroundGroup.style.display = 'none';
-                moderationGroup.style.display = 'none';
                 infoDiv.innerHTML = '⚡ Быстрая генерация изображений по доступной цене.';
             }
         }
@@ -424,14 +363,10 @@ textarea {
             
             const statusDiv = document.getElementById('status');
             const imagesDiv = document.getElementById('images');
-            const generateBtn = document.getElementById('generateBtn');
             const model = document.getElementById('model').value;
             
-            generateBtn.innerHTML = '<span class="loading"></span>Создаем изображения...';
-            generateBtn.disabled = true;
-            
             if (model === 'gpt-image-1') {
-                statusDiv.innerHTML = '<div class="status warning">⏳ GPT Image 1 может занимать до 2 минут для качественного результата...</div>';
+                statusDiv.innerHTML = '<div class="status">⏳ GPT Image 1 может занимать до 2 минут для качественного результата...</div>';
             } else {
                 statusDiv.innerHTML = '<div class="status">Генерируем изображения...</div>';
             }
@@ -442,7 +377,7 @@ textarea {
             const data = Object.fromEntries(formData);
             
             try {
-                const response = await fetch('/generate', {
+                const response = await fetch('/api/generate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(data)
@@ -474,94 +409,9 @@ textarea {
             } catch (error) {
                 statusDiv.innerHTML = `<div class="status error">❌ Ошибка сети: ${error.message}</div>`;
             }
-            
-            generateBtn.innerHTML = 'Создать изображения';
-            generateBtn.disabled = false;
         });
     </script>
 </body>
-</html>"""
-
-@app.route('/')
-def index():
-    return HTML_TEMPLATE
-
-@app.route('/generate', methods=['POST'])
-def generate_image():
-    try:
-        data = request.get_json()
-        api_key = data.get('api_key')
+</html>'''
         
-        if not api_key or not api_key.startswith('sk-'):
-            return jsonify({'success': False, 'error': 'OpenAI API ключ не найден'})
-        
-        client = get_openai_client(api_key)
-        if not client:
-            return jsonify({'success': False, 'error': 'Не удалось инициализировать OpenAI клиент'})
-        
-        model = data.get('model')
-        size = data.get('size')
-        quality = data.get('quality')
-        style = data.get('style')
-        background = data.get('background')
-        moderation = data.get('moderation')
-        n = int(data.get('n', 1))
-        prompt = data.get('prompt')
-        
-        if not prompt:
-            return jsonify({'success': False, 'error': 'Описание изображения обязательно'})
-        
-        params = {
-            "model": model,
-            "prompt": prompt,
-            "n": n,
-            "size": size
-        }
-        
-        if model == "gpt-image-1":
-            if quality and quality in ["low", "medium", "high"]:
-                params["quality"] = quality
-            if background and background in ["transparent", "white", "black"]:
-                params["background"] = background
-            if moderation and moderation in ["auto", "low"]:
-                params["moderation"] = moderation
-                
-        elif model == "dall-e-3":
-            if quality and quality in ["standard", "hd"]:
-                params["quality"] = quality
-            else:
-                params["quality"] = "standard"
-            if style and style in ["vivid", "natural"]:
-                params["style"] = style
-            else:
-                params["style"] = "vivid"
-        
-        response = client.images.generate(**params)
-        
-        if not hasattr(response, 'data') or not response.data:
-            return jsonify({'success': False, 'error': 'Неверный ответ от OpenAI API'})
-        
-        images = []
-        for i, image_data in enumerate(response.data):
-            if hasattr(image_data, 'b64_json') and image_data.b64_json:
-                images.append(image_data.b64_json)
-            elif hasattr(image_data, 'url') and image_data.url:
-                try:
-                    image_response = requests.get(image_data.url, timeout=60)
-                    if image_response.status_code == 200:
-                        image_b64 = base64.b64encode(image_response.content).decode('utf-8')
-                        images.append(image_b64)
-                    else:
-                        return jsonify({'success': False, 'error': f'Ошибка загрузки изображения {i+1}'})
-                except requests.exceptions.RequestException as e:
-                    return jsonify({'success': False, 'error': f'Ошибка загрузки: {str(e)}'})
-            else:
-                return jsonify({'success': False, 'error': f'Изображение {i+1} не содержит данных'})
-        
-        return jsonify({'success': True, 'images': images})
-        
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)})
-
-if __name__ == '__main__':
-    app.run(debug=True)
+        self.wfile.write(html.encode('utf-8'))
