@@ -1,8 +1,37 @@
 from http.server import BaseHTTPRequestHandler
+from urllib.parse import urlparse, parse_qs
 import json
+import os
+import requests
+import base64
+from openai import OpenAI
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
+        # Обрабатываем GET запросы (главная страница)
+        if self.path == '/' or self.path == '/index.html':
+            self.serve_main_page()
+        else:
+            self.send_error(404)
+    
+    def do_POST(self):
+        # Обрабатываем POST запросы (API)
+        parsed_path = urlparse(self.path)
+        
+        if parsed_path.path == '/api/generate':
+            self.handle_generate()
+        else:
+            self.send_error(404)
+    
+    def do_OPTIONS(self):
+        # CORS preflight
+        self.send_response(200)
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.end_headers()
+    
+    def serve_main_page(self):
         self.send_response(200)
         self.send_header('Content-type', 'text/html; charset=utf-8')
         self.end_headers()
@@ -15,12 +44,7 @@ class handler(BaseHTTPRequestHandler):
 <title>🎨 AI Image Generator</title>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
-
+* { margin: 0; padding: 0; box-sizing: border-box; }
 body {
     font-family: 'Montserrat', sans-serif;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -31,7 +55,6 @@ body {
     padding: 20px;
     color: #333;
 }
-
 .container {
     background: rgba(255, 255, 255, 0.95);
     backdrop-filter: blur(20px);
@@ -41,36 +64,30 @@ body {
     max-width: 900px;
     width: 100%;
 }
-
 .header {
     text-align: center;
     margin-bottom: 30px;
 }
-
 .header h1 {
     color: #2c3e50;
     font-weight: 700;
     margin-bottom: 10px;
 }
-
 .form-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
     gap: 25px;
     margin-bottom: 30px;
 }
-
 .form-group {
     display: flex;
     flex-direction: column;
 }
-
 label {
     font-weight: 600;
     color: #2c3e50;
     margin-bottom: 8px;
 }
-
 input, select, textarea {
     font-family: inherit;
     font-size: 16px;
@@ -80,18 +97,15 @@ input, select, textarea {
     background: white;
     transition: all 0.3s ease;
 }
-
 input:focus, select:focus, textarea:focus {
     outline: none;
     border-color: #667eea;
     box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
-
 textarea {
     resize: vertical;
     min-height: 120px;
 }
-
 .model-info {
     background: linear-gradient(135deg, #f8f9ff 0%, #e8edff 100%);
     padding: 12px 16px;
@@ -101,7 +115,6 @@ textarea {
     color: #5a67d8;
     border-left: 4px solid #667eea;
 }
-
 .generate-btn {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
@@ -117,12 +130,10 @@ textarea {
     width: 100%;
     margin-top: 20px;
 }
-
 .generate-btn:hover {
     transform: translateY(-2px);
     box-shadow: 0 15px 35px rgba(102, 126, 234, 0.4);
 }
-
 .status {
     margin: 25px 0;
     padding: 15px 20px;
@@ -130,24 +141,20 @@ textarea {
     font-weight: 500;
     text-align: center;
 }
-
 .status.success {
     background: linear-gradient(135deg, #00b894 0%, #00cec9 100%);
     color: white;
 }
-
 .status.error {
     background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
     color: white;
 }
-
 .images-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
     gap: 25px;
     margin-top: 30px;
 }
-
 .image-card {
     background: white;
     border-radius: 16px;
@@ -156,17 +163,14 @@ textarea {
     transition: all 0.3s ease;
     position: relative;
 }
-
 .image-card:hover {
     transform: translateY(-5px);
 }
-
 .image-card img {
     width: 100%;
     height: auto;
     display: block;
 }
-
 .image-overlay {
     position: absolute;
     top: 0;
@@ -180,11 +184,9 @@ textarea {
     align-items: center;
     justify-content: center;
 }
-
 .image-card:hover .image-overlay {
     opacity: 1;
 }
-
 .download-btn {
     background: rgba(255,255,255,0.2);
     backdrop-filter: blur(10px);
@@ -195,24 +197,20 @@ textarea {
     font-weight: 600;
     border: 2px solid rgba(255,255,255,0.3);
 }
-
 .balance-link {
     text-align: center;
     margin: 15px 0;
     font-size: 14px;
 }
-
 .balance-link a {
     color: #667eea;
     text-decoration: none;
 }
-
 @media (max-width: 768px) {
     .container {
         padding: 25px;
         margin: 10px;
     }
-    
     .form-grid {
         grid-template-columns: 1fr;
         gap: 20px;
@@ -366,7 +364,7 @@ textarea {
             const model = document.getElementById('model').value;
             
             if (model === 'gpt-image-1') {
-                statusDiv.innerHTML = '<div class="status">⏳ GPT Image 1 может занимать до 2 минут для качественного результата...</div>';
+                statusDiv.innerHTML = '<div class="status">⏳ GPT Image 1 может занимать до 2 минут...</div>';
             } else {
                 statusDiv.innerHTML = '<div class="status">Генерируем изображения...</div>';
             }
@@ -415,3 +413,109 @@ textarea {
 </html>'''
         
         self.wfile.write(html.encode('utf-8'))
+    
+    def handle_generate(self):
+        try:
+            # CORS headers
+            self.send_response(200)
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
+            self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            
+            # Читаем данные запроса
+            content_length = int(self.headers['Content-Length'])
+            post_data = self.rfile.read(content_length)
+            data = json.loads(post_data.decode('utf-8'))
+            
+            # Получаем API ключ
+            api_key = data.get('api_key')
+            if not api_key or not api_key.startswith('sk-'):
+                response = {'success': False, 'error': 'Требуется корректный OpenAI API ключ'}
+                self.wfile.write(json.dumps(response).encode('utf-8'))
+                return
+            
+            # Инициализируем OpenAI клиент
+            client = OpenAI(api_key=api_key)
+            
+            # Получаем параметры
+            model = data.get('model')
+            size = data.get('size')
+            quality = data.get('quality')
+            style = data.get('style')
+            background = data.get('background')
+            n = int(data.get('n', 1))
+            prompt = data.get('prompt')
+            
+            if not prompt:
+                response = {'success': False, 'error': 'Описание изображения обязательно'}
+                self.wfile.write(json.dumps(response).encode('utf-8'))
+                return
+            
+            # Собираем параметры для OpenAI API
+            params = {
+                "model": model,
+                "prompt": prompt,
+                "n": n,
+                "size": size
+            }
+            
+            if model == "gpt-image-1":
+                if quality and quality in ["low", "medium", "high"]:
+                    params["quality"] = quality
+                if background and background in ["transparent", "white", "black"]:
+                    params["background"] = background
+                    
+            elif model == "dall-e-3":
+                if quality and quality in ["standard", "hd"]:
+                    params["quality"] = quality
+                else:
+                    params["quality"] = "standard"
+                if style and style in ["vivid", "natural"]:
+                    params["style"] = style
+                else:
+                    params["style"] = "vivid"
+            
+            # Генерируем изображения
+            openai_response = client.images.generate(**params)
+            
+            if not hasattr(openai_response, 'data') or not openai_response.data:
+                response = {'success': False, 'error': 'Неверный ответ от OpenAI API'}
+                self.wfile.write(json.dumps(response).encode('utf-8'))
+                return
+            
+            # Обрабатываем изображения
+            images = []
+            for i, image_data in enumerate(openai_response.data):
+                if hasattr(image_data, 'b64_json') and image_data.b64_json:
+                    images.append(image_data.b64_json)
+                elif hasattr(image_data, 'url') and image_data.url:
+                    try:
+                        image_response = requests.get(image_data.url, timeout=60)
+                        if image_response.status_code == 200:
+                            image_b64 = base64.b64encode(image_response.content).decode('utf-8')
+                            images.append(image_b64)
+                        else:
+                            response = {'success': False, 'error': f'Ошибка загрузки изображения {i+1}'}
+                            self.wfile.write(json.dumps(response).encode('utf-8'))
+                            return
+                    except requests.exceptions.RequestException as e:
+                        response = {'success': False, 'error': f'Ошибка загрузки: {str(e)}'}
+                        self.wfile.write(json.dumps(response).encode('utf-8'))
+                        return
+                else:
+                    response = {'success': False, 'error': f'Изображение {i+1} не содержит данных'}
+                    self.wfile.write(json.dumps(response).encode('utf-8'))
+                    return
+            
+            # Возвращаем результат
+            response = {'success': True, 'images': images}
+            self.wfile.write(json.dumps(response).encode('utf-8'))
+            
+        except Exception as e:
+            self.send_response(500)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            response = {'success': False, 'error': str(e)}
+            self.wfile.write(json.dumps(response).encode('utf-8'))
