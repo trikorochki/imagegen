@@ -8,17 +8,21 @@ from openai import OpenAI
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        # Обрабатываем GET запросы (главная страница)
+        # Обрабатываем GET запросы
         if self.path == '/' or self.path == '/index.html':
+            self.serve_login_page()
+        elif self.path == '/app':
             self.serve_main_page()
         else:
             self.send_error(404)
     
     def do_POST(self):
-        # Обрабатываем POST запросы (API)
+        # Обрабатываем POST запросы
         parsed_path = urlparse(self.path)
         
-        if parsed_path.path == '/api/generate':
+        if parsed_path.path == '/api/login':
+            self.handle_login()
+        elif parsed_path.path == '/api/generate':
             self.handle_generate()
         else:
             self.send_error(404)
@@ -31,10 +35,173 @@ class handler(BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         self.end_headers()
     
+    def serve_login_page(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'text/html; charset=utf-8')
+        self.end_headers()
+        
+        html = '''<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>🔐 Вход - AI Image Generator</title>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: 'Montserrat', sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+.login-container {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(20px);
+    border-radius: 20px;
+    padding: 40px;
+    box-shadow: 0 25px 50px rgba(0,0,0,0.15);
+    max-width: 400px;
+    width: 100%;
+    text-align: center;
+}
+.login-container h1 {
+    color: #2c3e50;
+    font-weight: 700;
+    margin-bottom: 10px;
+}
+.login-container p {
+    color: #666;
+    margin-bottom: 30px;
+}
+input {
+    font-family: inherit;
+    font-size: 16px;
+    padding: 15px;
+    border: 2px solid #e1e8ed;
+    border-radius: 12px;
+    background: white;
+    transition: all 0.3s ease;
+    width: 100%;
+    margin-bottom: 20px;
+}
+input:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+.login-btn {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    padding: 15px 30px;
+    border-radius: 25px;
+    font-family: inherit;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+    width: 100%;
+}
+.login-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 15px 35px rgba(102, 126, 234, 0.4);
+}
+.error {
+    color: #ff6b6b;
+    margin-top: 15px;
+    font-weight: 500;
+}
+</style>
+</head>
+<body>
+    <div class="login-container">
+        <h1>🎨 AI Image Generator</h1>
+        <p>Введите секретный ключ для доступа</p>
+        
+        <form id="loginForm">
+            <input type="password" id="secretKey" placeholder="Секретный ключ" required />
+            <button type="submit" class="login-btn">Войти</button>
+        </form>
+        
+        <div id="error"></div>
+    </div>
+
+    <script>
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const errorDiv = document.getElementById('error');
+            const secretKey = document.getElementById('secretKey').value;
+            
+            try {
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ secret_key: secretKey })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    window.location.href = '/app';
+                } else {
+                    errorDiv.textContent = 'Неверный секретный ключ';
+                    errorDiv.className = 'error';
+                }
+            } catch (error) {
+                errorDiv.textContent = 'Ошибка подключения';
+                errorDiv.className = 'error';
+            }
+        });
+    </script>
+</body>
+</html>'''
+        
+        self.wfile.write(html.encode('utf-8'))
+    
+    def handle_login(self):
+        try:
+            # CORS headers
+            self.send_response(200)
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            
+            # Читаем данные запроса
+            content_length = int(self.headers['Content-Length'])
+            post_data = self.rfile.read(content_length)
+            data = json.loads(post_data.decode('utf-8'))
+            
+            secret_key = data.get('secret_key')
+            expected_secret = os.environ.get('SECRET_KEY', '')
+            
+            if secret_key == expected_secret and expected_secret:
+                response = {'success': True}
+            else:
+                response = {'success': False}
+            
+            self.wfile.write(json.dumps(response).encode('utf-8'))
+            
+        except Exception as e:
+            self.send_response(500)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            response = {'success': False, 'error': str(e)}
+            self.wfile.write(json.dumps(response).encode('utf-8'))
+    
     def serve_main_page(self):
         self.send_response(200)
         self.send_header('Content-type', 'text/html; charset=utf-8')
         self.end_headers()
+        
+        # Проверяем наличие OpenAI API ключа
+        openai_key = os.environ.get('OPENAI_API_KEY', '')
+        api_status = 'ok' if openai_key else 'missing'
         
         html = '''<!DOCTYPE html>
 <html lang="ru">
@@ -72,6 +239,21 @@ body {
     color: #2c3e50;
     font-weight: 700;
     margin-bottom: 10px;
+}
+.api-status {
+    padding: 15px 20px;
+    border-radius: 12px;
+    margin-bottom: 30px;
+    font-weight: 500;
+    text-align: center;
+}
+.api-ok {
+    background: linear-gradient(135deg, #00b894 0%, #00cec9 100%);
+    color: white;
+}
+.api-error {
+    background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+    color: white;
 }
 .form-grid {
     display: grid;
@@ -114,6 +296,25 @@ textarea {
     font-size: 0.85rem;
     color: #5a67d8;
     border-left: 4px solid #667eea;
+}
+.cost-hint {
+    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+    padding: 15px;
+    border-radius: 12px;
+    margin-top: 15px;
+    font-size: 0.9rem;
+    color: #1e40af;
+    border-left: 4px solid #3b82f6;
+}
+.cost-hint strong {
+    color: #1e3a8a;
+}
+.cost-hint a {
+    color: #2563eb;
+    text-decoration: none;
+}
+.cost-hint a:hover {
+    text-decoration: underline;
 }
 .generate-btn {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -225,16 +426,15 @@ textarea {
             <p style="color: #666;">Создавайте удивительные изображения с помощью ИИ</p>
         </div>
         
+        <div id="apiStatus" class="api-status ''' + ('api-ok' if api_status == 'ok' else 'api-error') + '''">
+            ''' + ('✅ OpenAI API подключен и готов к работе' if api_status == 'ok' else '❌ OpenAI API ключ не найден в окружении') + '''
+        </div>
+        
         <form id="imageForm">
-            <div class="form-group">
-                <label for="api_key">OpenAI API Key:</label>
-                <input type="password" id="api_key" name="api_key" placeholder="sk-..." required />
-            </div>
-            
             <div class="form-grid">
                 <div class="form-group">
                     <label for="model">Модель:</label>
-                    <select id="model" name="model" onchange="updateModelOptions()">
+                    <select id="model" name="model" onchange="updateModelOptions(); updateCostHint();">
                         <option value="gpt-image-1">GPT Image 1 (Лучшее качество)</option>
                         <option value="dall-e-3">DALL-E 3 (Высокое качество)</option>
                         <option value="dall-e-2">DALL-E 2 (Быстро и доступно)</option>
@@ -244,12 +444,12 @@ textarea {
                 
                 <div class="form-group">
                     <label for="size">Размер изображения:</label>
-                    <select id="size" name="size"></select>
+                    <select id="size" name="size" onchange="updateCostHint();"></select>
                 </div>
                 
                 <div class="form-group" id="qualityGroup">
                     <label for="quality">Качество:</label>
-                    <select id="quality" name="quality"></select>
+                    <select id="quality" name="quality" onchange="updateCostHint();"></select>
                 </div>
                 
                 <div class="form-group" id="styleGroup">
@@ -272,14 +472,14 @@ textarea {
                 <div class="form-group" id="moderationGroup">
                     <label for="moderation">Модерация (GPT Image 1):</label>
                     <select id="moderation" name="moderation">
-                        <option value="low">Низкая (менее строгая)</option>
                         <option value="auto">Авто (стандартная)</option>
+                        <option value="low">Низкая (менее строгая)</option>
                     </select>
                 </div>
                 
                 <div class="form-group">
                     <label for="n">Количество изображений:</label>
-                    <select id="n" name="n">
+                    <select id="n" name="n" onchange="updateCostHint();">
                         <option value="1">1</option>
                         <option value="2">2</option>
                         <option value="3">3</option>
@@ -291,6 +491,11 @@ textarea {
             <div class="form-group">
                 <label for="prompt">Описание изображения:</label>
                 <textarea id="prompt" name="prompt" placeholder="Опишите изображение, которое хотите создать..." required></textarea>
+            </div>
+            
+            <!-- Информация о стоимости -->
+            <div id="costHint" class="cost-hint">
+                Загружается информация о стоимости...
             </div>
             
             <button type="submit" class="generate-btn">
@@ -307,6 +512,45 @@ textarea {
     </div>
 
     <script>
+        // Данные о ценах (актуальные по состоянию на 2025)
+        const priceData = {
+            "gpt-image-1": {
+                "1024x1024": { "low": 0.011, "medium": 0.042, "high": 0.167, "auto": 0.042 },
+                "1024x1536": { "low": 0.016, "medium": 0.063, "high": 0.250, "auto": 0.063 },
+                "1536x1024": { "low": 0.016, "medium": 0.063, "high": 0.250, "auto": 0.063 }
+            },
+            "dall-e-3": {
+                "1024x1024": { "standard": 0.040, "hd": 0.080 },
+                "1024x1792": { "standard": 0.080, "hd": 0.120 },
+                "1792x1024": { "standard": 0.080, "hd": 0.120 }
+            },
+            "dall-e-2": {
+                "1024x1024": { "standard": 0.020 },
+                "512x512": { "standard": 0.018 },
+                "256x256": { "standard": 0.016 }
+            }
+        };
+
+        function updateCostHint() {
+            const model = document.getElementById('model').value;
+            const size = document.getElementById('size').value;
+            const quality = document.getElementById('quality').value;
+            const n = parseInt(document.getElementById('n').value);
+            
+            if (!model || !size || !quality) return;
+            
+            const costPerImage = priceData[model]?.[size]?.[quality] || 0;
+            const totalCost = costPerImage * n;
+            
+            const costHint = document.getElementById('costHint');
+            costHint.innerHTML = `
+                <strong>💰 Стоимость генерации:</strong><br>
+                За 1 изображение: <strong>$${costPerImage.toFixed(4)}</strong><br>
+                Общая стоимость (${n} изобр.): <strong>$${totalCost.toFixed(4)}</strong><br>
+                <a href="https://platform.openai.com/docs/pricing#image-generation" target="_blank">📊 Подробнее о ценах</a>
+            `;
+        }
+
         function updateModelOptions() {
             const model = document.getElementById('model').value;
             const sizeSelect = document.getElementById('size');
@@ -358,7 +602,8 @@ textarea {
                     <option value="512x512">512×512</option>
                     <option value="256x256">256×256</option>
                 `;
-                qualityGroup.style.display = 'none';
+                qualitySelect.innerHTML = `<option value="standard">Стандартное</option>`;
+                qualityGroup.style.display = 'block';
                 styleGroup.style.display = 'none';
                 backgroundGroup.style.display = 'none';
                 moderationGroup.style.display = 'none';
@@ -367,6 +612,7 @@ textarea {
         }
         
         updateModelOptions();
+        updateCostHint();
         
         document.getElementById('imageForm').addEventListener('submit', async function(e) {
             e.preventDefault();
@@ -436,20 +682,20 @@ textarea {
             self.send_header('Content-type', 'application/json')
             self.end_headers()
             
-            # Читаем данные запроса
-            content_length = int(self.headers['Content-Length'])
-            post_data = self.rfile.read(content_length)
-            data = json.loads(post_data.decode('utf-8'))
-            
-            # Получаем API ключ
-            api_key = data.get('api_key')
-            if not api_key or not api_key.startswith('sk-'):
-                response = {'success': False, 'error': 'Требуется корректный OpenAI API ключ'}
+            # Получаем API ключ из окружения
+            api_key = os.environ.get('OPENAI_API_KEY')
+            if not api_key:
+                response = {'success': False, 'error': 'OpenAI API ключ не настроен на сервере'}
                 self.wfile.write(json.dumps(response).encode('utf-8'))
                 return
             
             # Инициализируем OpenAI клиент
             client = OpenAI(api_key=api_key)
+            
+            # Читаем данные запроса
+            content_length = int(self.headers['Content-Length'])
+            post_data = self.rfile.read(content_length)
+            data = json.loads(post_data.decode('utf-8'))
             
             # Получаем параметры
             model = data.get('model')
@@ -476,14 +722,14 @@ textarea {
             
             # Параметры для GPT Image 1 (согласно документации)
             if model == "gpt-image-1":
-                # Quality: low, medium, high, auto (default)
+                # Quality: low, medium, high, auto
                 if quality and quality in ["low", "medium", "high", "auto"]:
                     params["quality"] = quality
                 # Background: transparent, opaque, auto
                 if background and background in ["transparent", "opaque", "auto"]:
                     params["background"] = background
                 # Moderation: auto (standard), low (less restrictive)
-                if moderation and moderation in ["low", "auto"]:
+                if moderation and moderation in ["auto", "low"]:
                     params["moderation"] = moderation
                     
             elif model == "dall-e-3":
