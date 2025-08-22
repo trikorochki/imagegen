@@ -120,7 +120,7 @@ input:focus {
 </head>
 <body>
     <div class="login-container">
-        <h1>🎨 AI Image Generator</h1>
+        <h1>Ksenia's image generator</h1>
         <p>Введите секретный ключ для доступа</p>
         
         <form id="loginForm">
@@ -208,7 +208,7 @@ input:focus {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>🎨 AI Image Generator</title>
+<title>🎨 Ksenia's image generator</title>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -422,8 +422,7 @@ textarea {
 <body>
     <div class="container">
         <div class="header">
-            <h1>🎨 AI Image Generator</h1>
-            <p style="color: #666;">Создавайте удивительные изображения с помощью ИИ</p>
+            <h1>Ksenia's lustfull image generator</h1>
         </div>
         
         <div id="apiStatus" class="api-status ''' + ('api-ok' if api_status == 'ok' else 'api-error') + '''">
@@ -472,8 +471,8 @@ textarea {
                 <div class="form-group" id="moderationGroup">
                     <label for="moderation">Модерация (GPT Image 1):</label>
                     <select id="moderation" name="moderation">
-                        <option value="auto">Авто (стандартная)</option>
                         <option value="low">Низкая (менее строгая)</option>
+                        <option value="auto">Авто (стандартная)</option>
                     </select>
                 </div>
                 
