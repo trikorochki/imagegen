@@ -468,7 +468,7 @@ textarea {
                 <div class="form-group" id="moderationGroup">
                     <label for="moderation">Модерация (GPT Image 1):</label>
                     <select id="moderation" name="moderation">
-                        <option value="low">Низкая (менее строгая)</option>
+                        <option value="low" selected>Низкая (менее строгая)</option>
                         <option value="auto">Авто (стандартная)</option>
                     </select>
                 </div>
@@ -567,10 +567,10 @@ textarea {
                     <option value="1536x1024">1536×1024 (Пейзаж)</option>
                 `;
                 qualitySelect.innerHTML = `
-                    <option value="auto" selected>Авто (по умолчанию)</option>
-                    <option value="low">Низкое</option>
+                    <option value="low" selected>Низкое</option>
                     <option value="medium">Среднее</option>
                     <option value="high">Высокое</option>
+                    <option value="auto">По-умолчанию (среднее)</option>
                 `;
                 qualityGroup.style.display = 'block';
                 styleGroup.style.display = 'none';
@@ -715,7 +715,7 @@ textarea {
                 if background and background in ["transparent", "opaque", "auto"]:
                     params["background"] = background
                 # Moderation: auto (standard), low (less restrictive)
-                if moderation and moderation in ["auto", "low"]:
+                if moderation and moderation in ["low", "auto"]:
                     params["moderation"] = moderation
                     
             elif model == "dall-e-3":
