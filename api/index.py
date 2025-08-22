@@ -263,10 +263,17 @@ textarea {
                 <div class="form-group" id="backgroundGroup">
                     <label for="background">Фон (GPT Image 1):</label>
                     <select id="background" name="background">
-                        <option value="">По умолчанию</option>
+                        <option value="auto">Авто (по умолчанию)</option>
                         <option value="transparent">Прозрачный</option>
-                        <option value="white">Белый</option>
-                        <option value="black">Черный</option>
+                        <option value="opaque">Непрозрачный</option>
+                    </select>
+                </div>
+                
+                <div class="form-group" id="moderationGroup">
+                    <label for="moderation">Модерация (GPT Image 1):</label>
+                    <select id="moderation" name="moderation">
+                        <option value="low">Низкая (менее строгая)</option>
+                        <option value="auto">Авто (стандартная)</option>
                     </select>
                 </div>
                 
@@ -307,6 +314,7 @@ textarea {
             const qualitySelect = document.getElementById('quality');
             const styleGroup = document.getElementById('styleGroup');
             const backgroundGroup = document.getElementById('backgroundGroup');
+            const moderationGroup = document.getElementById('moderationGroup');
             const infoDiv = document.getElementById('modelInfo');
             
             sizeSelect.innerHTML = '';
@@ -319,14 +327,16 @@ textarea {
                     <option value="1536x1024">1536×1024 (Пейзаж)</option>
                 `;
                 qualitySelect.innerHTML = `
+                    <option value="auto" selected>Авто (по умолчанию)</option>
                     <option value="low">Низкое</option>
-                    <option value="medium" selected>Среднее</option>
+                    <option value="medium">Среднее</option>
                     <option value="high">Высокое</option>
                 `;
                 qualityGroup.style.display = 'block';
                 styleGroup.style.display = 'none';
                 backgroundGroup.style.display = 'block';
-                infoDiv.innerHTML = '🚀 Новейшая модель с лучшим качеством и пониманием текста. Может занимать до 2 минут.';
+                moderationGroup.style.display = 'block';
+                infoDiv.innerHTML = '🚀 Новейшая модель с лучшим качеством, пониманием текста и поддержкой прозрачного фона. Может занимать до 2 минут.';
             } else if (model === 'dall-e-3') {
                 sizeSelect.innerHTML = `
                     <option value="1024x1024">1024×1024 (Квадрат)</option>
@@ -340,6 +350,7 @@ textarea {
                 qualityGroup.style.display = 'block';
                 styleGroup.style.display = 'block';
                 backgroundGroup.style.display = 'none';
+                moderationGroup.style.display = 'none';
                 infoDiv.innerHTML = '🎨 Высокое качество изображений и понимание сложных описаний.';
             } else {
                 sizeSelect.innerHTML = `
@@ -350,6 +361,7 @@ textarea {
                 qualityGroup.style.display = 'none';
                 styleGroup.style.display = 'none';
                 backgroundGroup.style.display = 'none';
+                moderationGroup.style.display = 'none';
                 infoDiv.innerHTML = '⚡ Быстрая генерация изображений по доступной цене.';
             }
         }
@@ -445,6 +457,7 @@ textarea {
             quality = data.get('quality')
             style = data.get('style')
             background = data.get('background')
+            moderation = data.get('moderation')
             n = int(data.get('n', 1))
             prompt = data.get('prompt')
             
@@ -461,11 +474,17 @@ textarea {
                 "size": size
             }
             
+            # Параметры для GPT Image 1 (согласно документации)
             if model == "gpt-image-1":
-                if quality and quality in ["low", "medium", "high"]:
+                # Quality: low, medium, high, auto (default)
+                if quality and quality in ["low", "medium", "high", "auto"]:
                     params["quality"] = quality
-                if background and background in ["transparent", "white", "black"]:
+                # Background: transparent, opaque, auto
+                if background and background in ["transparent", "opaque", "auto"]:
                     params["background"] = background
+                # Moderation: auto (standard), low (less restrictive)
+                if moderation and moderation in ["low", "auto"]:
+                    params["moderation"] = moderation
                     
             elif model == "dall-e-3":
                 if quality and quality in ["standard", "hd"]:
