@@ -20,9 +20,23 @@ class handler(BaseHTTPRequestHandler):
         if self.path == '/' or self.path == '/index.html':
             self.serve_login_page()
         elif self.path == '/app':
+            # Проверяем авторизацию для /app
+            if not self.is_authenticated():
+                # Перенаправляем на главную страницу
+                self.send_response(302)
+                self.send_header('Location', '/')
+                self.end_headers()
+                return
             self.serve_main_page()
         else:
             self.send_error(404)
+
+    def is_authenticated(self):
+        """Проверяет cookie авторизации"""
+        cookies = self.headers.get('Cookie', '')
+        # Проверяем наличие валидного токена
+        return 'auth_token=valid' in cookies
+
     
     def do_POST(self):
         # Обрабатываем POST запросы
@@ -188,12 +202,21 @@ input:focus {
             expected_secret = os.environ.get('SECRET_KEY', '')
             
             if secret_key == expected_secret and expected_secret:
-                self.respond_json({'success': True})
+                # ПРИ УСПЕШНОЙ АВТОРИЗАЦИИ УСТАНАВЛИВАЕМ COOKIE
+                response_data = {'success': True}
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                # Устанавливаем cookie для авторизации
+                self.send_header('Set-Cookie', 'auth_token=valid; Path=/; HttpOnly')
+                self.end_headers()
+                self.wfile.write(json.dumps(response_data).encode('utf-8'))
             else:
                 self.respond_json({'success': False})
             
         except Exception as e:
             self.respond_json({'success': False, 'error': str(e)}, 500)
+
     
     def serve_main_page(self):
         # Проверяем наличие OpenAI API ключа
