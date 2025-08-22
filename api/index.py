@@ -7,6 +7,14 @@ import base64
 from openai import OpenAI
 
 class handler(BaseHTTPRequestHandler):
+    def do_OPTIONS(self):
+        # CORS preflight
+        self.send_response(204)
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.end_headers()
+
     def do_GET(self):
         # Обрабатываем GET запросы
         if self.path == '/' or self.path == '/index.html':
@@ -27,19 +35,24 @@ class handler(BaseHTTPRequestHandler):
         else:
             self.send_error(404)
     
-    def do_OPTIONS(self):
-        # CORS preflight
-        self.send_response(200)
+    def respond_json(self, data, status_code=200):
+        """Отправляет JSON ответ с правильными заголовками"""
+        self.send_response(status_code)
+        self.send_header('Content-Type', 'application/json')
         self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         self.end_headers()
+        self.wfile.write(json.dumps(data).encode('utf-8'))
+    
+    def respond_html(self, html):
+        """Отправляет HTML ответ"""
+        self.send_response(200)
+        self.send_header('Content-Type', 'text/html; charset=utf-8')
+        self.end_headers()
+        self.wfile.write(html.encode('utf-8'))
     
     def serve_login_page(self):
-        self.send_response(200)
-        self.send_header('Content-type', 'text/html; charset=utf-8')
-        self.end_headers()
-        
         html = '''<!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -154,7 +167,7 @@ input:focus {
                     errorDiv.className = 'error';
                 }
             } catch (error) {
-                errorDiv.textContent = 'Ошибка подключения';
+                errorDiv.textContent = 'Ошибка подключения: ' + error.message;
                 errorDiv.className = 'error';
             }
         });
@@ -162,18 +175,12 @@ input:focus {
 </body>
 </html>'''
         
-        self.wfile.write(html.encode('utf-8'))
+        self.respond_html(html)
     
     def handle_login(self):
         try:
-            # CORS headers
-            self.send_response(200)
-            self.send_header('Access-Control-Allow-Origin', '*')
-            self.send_header('Content-type', 'application/json')
-            self.end_headers()
-            
             # Читаем данные запроса
-            content_length = int(self.headers['Content-Length'])
+            content_length = int(self.headers.get('Content-Length', 0))
             post_data = self.rfile.read(content_length)
             data = json.loads(post_data.decode('utf-8'))
             
@@ -181,24 +188,14 @@ input:focus {
             expected_secret = os.environ.get('SECRET_KEY', '')
             
             if secret_key == expected_secret and expected_secret:
-                response = {'success': True}
+                self.respond_json({'success': True})
             else:
-                response = {'success': False}
-            
-            self.wfile.write(json.dumps(response).encode('utf-8'))
+                self.respond_json({'success': False})
             
         except Exception as e:
-            self.send_response(500)
-            self.send_header('Content-type', 'application/json')
-            self.end_headers()
-            response = {'success': False, 'error': str(e)}
-            self.wfile.write(json.dumps(response).encode('utf-8'))
+            self.respond_json({'success': False, 'error': str(e)}, 500)
     
     def serve_main_page(self):
-        self.send_response(200)
-        self.send_header('Content-type', 'text/html; charset=utf-8')
-        self.end_headers()
-        
         # Проверяем наличие OpenAI API ключа
         openai_key = os.environ.get('OPENAI_API_KEY', '')
         api_status = 'ok' if openai_key else 'missing'
@@ -669,30 +666,21 @@ textarea {
 </body>
 </html>'''
         
-        self.wfile.write(html.encode('utf-8'))
+        self.respond_html(html)
     
     def handle_generate(self):
         try:
-            # CORS headers
-            self.send_response(200)
-            self.send_header('Access-Control-Allow-Origin', '*')
-            self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
-            self.send_header('Access-Control-Allow-Headers', 'Content-Type')
-            self.send_header('Content-type', 'application/json')
-            self.end_headers()
-            
             # Получаем API ключ из окружения
             api_key = os.environ.get('OPENAI_API_KEY')
             if not api_key:
-                response = {'success': False, 'error': 'OpenAI API ключ не настроен на сервере'}
-                self.wfile.write(json.dumps(response).encode('utf-8'))
+                self.respond_json({'success': False, 'error': 'OpenAI API ключ не настроен на сервере'}, 500)
                 return
             
             # Инициализируем OpenAI клиент
             client = OpenAI(api_key=api_key)
             
             # Читаем данные запроса
-            content_length = int(self.headers['Content-Length'])
+            content_length = int(self.headers.get('Content-Length', 0))
             post_data = self.rfile.read(content_length)
             data = json.loads(post_data.decode('utf-8'))
             
@@ -707,8 +695,7 @@ textarea {
             prompt = data.get('prompt')
             
             if not prompt:
-                response = {'success': False, 'error': 'Описание изображения обязательно'}
-                self.wfile.write(json.dumps(response).encode('utf-8'))
+                self.respond_json({'success': False, 'error': 'Описание изображения обязательно'}, 400)
                 return
             
             # Собираем параметры для OpenAI API
@@ -745,8 +732,7 @@ textarea {
             openai_response = client.images.generate(**params)
             
             if not hasattr(openai_response, 'data') or not openai_response.data:
-                response = {'success': False, 'error': 'Неверный ответ от OpenAI API'}
-                self.wfile.write(json.dumps(response).encode('utf-8'))
+                self.respond_json({'success': False, 'error': 'Неверный ответ от OpenAI API'}, 500)
                 return
             
             # Обрабатываем изображения
@@ -761,25 +747,17 @@ textarea {
                             image_b64 = base64.b64encode(image_response.content).decode('utf-8')
                             images.append(image_b64)
                         else:
-                            response = {'success': False, 'error': f'Ошибка загрузки изображения {i+1}'}
-                            self.wfile.write(json.dumps(response).encode('utf-8'))
+                            self.respond_json({'success': False, 'error': f'Ошибка загрузки изображения {i+1}'}, 500)
                             return
                     except requests.exceptions.RequestException as e:
-                        response = {'success': False, 'error': f'Ошибка загрузки: {str(e)}'}
-                        self.wfile.write(json.dumps(response).encode('utf-8'))
+                        self.respond_json({'success': False, 'error': f'Ошибка загрузки: {str(e)}'}, 500)
                         return
                 else:
-                    response = {'success': False, 'error': f'Изображение {i+1} не содержит данных'}
-                    self.wfile.write(json.dumps(response).encode('utf-8'))
+                    self.respond_json({'success': False, 'error': f'Изображение {i+1} не содержит данных'}, 500)
                     return
             
             # Возвращаем результат
-            response = {'success': True, 'images': images}
-            self.wfile.write(json.dumps(response).encode('utf-8'))
+            self.respond_json({'success': True, 'images': images})
             
         except Exception as e:
-            self.send_response(500)
-            self.send_header('Content-type', 'application/json')
-            self.end_headers()
-            response = {'success': False, 'error': str(e)}
-            self.wfile.write(json.dumps(response).encode('utf-8'))
+            self.respond_json({'success': False, 'error': str(e)}, 500)
